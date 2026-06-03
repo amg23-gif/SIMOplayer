@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' show TextDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_constants.dart';
@@ -172,7 +171,6 @@ class _EpgProgramItem extends StatelessWidget {
                   fontWeight:
                       isLive ? FontWeight.bold : FontWeight.normal,
                 ),
-                textDirection: TextDirection.rtl,
               ),
               // وصف البرنامج
               if (program.description != null && program.description!.isNotEmpty) ...[
@@ -185,7 +183,6 @@ class _EpgProgramItem extends StatelessWidget {
                       fontFamily: 'Cairo',
                       color: Colors.white38,
                       fontSize: 11),
-                  textDirection: TextDirection.rtl,
                 ),
               ],
               // شريط التقدم للبرنامج الحالي
@@ -230,7 +227,6 @@ class _EpgProgramItem extends StatelessWidget {
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
-              textDirection: TextDirection.rtl,
             ),
             const SizedBox(height: 8),
             Text(
@@ -244,7 +240,6 @@ class _EpgProgramItem extends StatelessWidget {
                 program.description!,
                 style: const TextStyle(
                     fontFamily: 'Cairo', color: Colors.white70, fontSize: 13),
-                textDirection: TextDirection.rtl,
               ),
             ],
             const SizedBox(height: 20),
