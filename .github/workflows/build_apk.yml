@@ -76,7 +76,6 @@ jobs:
         run: |
           python3 << 'PYEOF'
           import os, struct, zlib
-
           def make_png(size):
               def chunk(name, data):
                   c = struct.pack('>I', len(data)) + name + data
@@ -88,32 +87,40 @@ jobs:
                   raw += b'\x00'
                   for x in range(size):
                       cx, cy = x - size//2, y - size//2
-                      if cx*cx + cy*cy <= (size//2 - 2)**2:
-                          raw += bytes([26, 26, 46])
-                      else:
-                          raw += bytes([233, 69, 96])
+                      r = (size//2 - 2)**2
+                      raw += bytes([26, 26, 46]) if cx*cx + cy*cy <= r else bytes([233, 69, 96])
               idat = chunk(b'IDAT', zlib.compress(raw))
               iend = chunk(b'IEND', b'')
               return sig + ihdr + idat + iend
-
-          sizes = {
-              'mipmap-mdpi': 48, 'mipmap-hdpi': 72,
-              'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192
-          }
+          sizes = {'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192}
           base = 'android/app/src/main/res'
           for folder, size in sizes.items():
               path = os.path.join(base, folder)
               os.makedirs(path, exist_ok=True)
               with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f:
                   f.write(make_png(size))
-              print(f"Created {path}/ic_launcher.png ({size}x{size})")
+              print(f"Created {folder}/ic_launcher.png ({size}x{size})")
           PYEOF
 
-      - name: Patch build.gradle to use SDK 34
+      - name: Upgrade AGP and Gradle to fix dexing issues
+        run: |
+          # Upgrade Android Gradle Plugin from 7.4.2 to 8.1.0
+          sed -i "s/com.android.tools.build:gradle:7.4.2/com.android.tools.build:gradle:8.1.4/g" android/build.gradle
+          # Upgrade Gradle wrapper from 7.6.3 to 8.5
+          sed -i "s|gradle-7.6.3-all.zip|gradle-8.5-all.zip|g" android/gradle/wrapper/gradle-wrapper.properties
+          # Use namespace in app build.gradle (required by AGP 8+)
+          echo "AGP and Gradle versions updated:"
+          grep "com.android.tools.build:gradle" android/build.gradle
+          grep "distributionUrl" android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Patch build.gradle for SDK 34 and Java 17
         run: |
           sed -i 's/compileSdkVersion 35/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion 35/targetSdkVersion 34/g' android/app/build.gradle
-          grep -E 'compileSdkVersion|targetSdkVersion' android/app/build.gradle
+          sed -i "s/sourceCompatibility JavaVersion.VERSION_1_8/sourceCompatibility JavaVersion.VERSION_17/g" android/app/build.gradle
+          sed -i "s/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_17/g" android/app/build.gradle
+          sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" android/app/build.gradle
+          grep -E 'compileSdkVersion|targetSdkVersion|sourceCompatibility|jvmTarget' android/app/build.gradle
 
       - name: Flutter pub get
         run: flutter pub get
