@@ -1,0 +1,13 @@
+{
+  "_comment": "ملف إعادة التسمية لوضع الموزعين - اختياري",
+  "_instructions": "قم بتعديل هذا الملف لتغيير هوية التطبيق للموزعين",
+  "enabled": false,
+  "appName": "SIMO Player",
+  "primaryColor": "#1565C0",
+  "accentColor": "#00E5FF",
+  "logoPath": "assets/images/logo.png",
+  "splashTagline": "مشغل IPTV الاحترافي",
+  "supportEmail": "support@simoplayer.com",
+  "privacyPolicyUrl": "https://simoplayer.com/privacy",
+  "termsUrl": "https://simoplayer.com/terms"
+}
