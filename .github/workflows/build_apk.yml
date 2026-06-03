@@ -82,16 +82,23 @@ jobs:
           }
           EOF
 
-      # ─── 6. تثبيت الحزم ────────────────────────────────────────
+      # ─── 6. تثبيت Android SDK 35 ───────────────────────────────
+      - name: Install Android SDK Platform 35
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0" || true
+
+      # ─── 7. تثبيت الحزم ────────────────────────────────────────
       - name: Flutter pub get
         run: flutter pub get
 
-      # ─── 7. توليد كود Drift ─────────────────────────────────────
+      # ─── 8. توليد كود Drift ─────────────────────────────────────
       - name: Run build_runner
         run: dart run build_runner build --delete-conflicting-outputs
         continue-on-error: true
 
-      # ─── 8. بناء APK ────────────────────────────────────────────
+      # ─── 9. بناء APK ────────────────────────────────────────────
       - name: Build Debug APK
         run: flutter build apk --debug --no-shrink
         env:
