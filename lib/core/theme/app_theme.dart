@@ -41,7 +41,7 @@ class AppTheme {
         unselectedItemColor: Colors.grey[600],
         type: BottomNavigationBarType.fixed,
       ),
-      cardTheme: CardThemeData(
+      cardTheme: const CardTheme(
         color: darkCard,
         elevation: 2,
         shape: RoundedRectangleBorder(
