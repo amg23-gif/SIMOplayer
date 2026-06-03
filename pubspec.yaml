@@ -1,0 +1,126 @@
+name: simo_player
+description: مشغل IPTV احترافي - SIMO Player
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # إدارة الحالة
+  flutter_riverpod: ^2.4.9
+  flutter_hooks: ^0.20.3
+  hooks_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # التنقل
+  go_router: ^13.0.1
+
+  # قاعدة البيانات المحلية
+  drift: ^2.14.1
+  sqlite3_flutter_libs: ^0.5.18
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  firebase_storage: ^11.6.0
+  firebase_database: ^10.4.0
+
+  # تسجيل الدخول
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^5.0.0
+
+  # مشغل الفيديو
+  video_player: ^2.8.2
+  chewie: ^1.7.4
+  better_player: ^0.0.84
+
+  # الشبكة
+  dio: ^5.4.0
+  http: ^1.2.0
+
+  # تحليل البيانات
+  xml: ^6.5.0
+
+  # الأمان
+  flutter_secure_storage: ^9.0.0
+  encrypt: ^5.0.3
+
+  # QR Code
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^3.5.6
+
+  # البحث الصوتي
+  speech_to_text: ^6.6.0
+
+  # المشاركة والروابط
+  share_plus: ^7.2.1
+  url_launcher: ^6.2.4
+
+  # الإشعارات
+  flutter_local_notifications: ^16.3.0
+
+  # واجهة المستخدم
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  lottie: ^3.0.0
+  flutter_svg: ^2.0.10+1
+  animations: ^2.0.11
+  carousel_slider: ^4.2.1
+  intl: ^0.19.0
+  timeago: ^3.6.0
+
+  # أدوات مساعدة
+  equatable: ^2.0.5
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+  collection: ^1.18.0
+  rxdart: ^0.27.7
+  connectivity_plus: ^6.0.3
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.0.0
+  crypto: ^3.0.3
+  uuid: ^4.3.3
+  wakelock_plus: ^1.1.4
+  permission_handler: ^11.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  drift_dev: ^2.14.1
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+  riverpod_generator: ^2.3.9
+  custom_lint: ^0.6.0
+  riverpod_lint: ^2.3.7
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/images/
+    - assets/config/
+    - assets/fonts/
+
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Cairo-Light.ttf
+          weight: 300
