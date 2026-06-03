@@ -27,6 +27,12 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Install Android SDK Platform 34
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" 2>&1 | tail -5
+
       - name: Create google-services.json
         run: |
           mkdir -p android/app
@@ -71,10 +77,10 @@ jobs:
           }
           DARTEOF
 
-      - name: Downgrade Android SDK to 33
+      - name: Patch build.gradle to use SDK 34
         run: |
-          sed -i 's/compileSdkVersion 35/compileSdkVersion 33/g' android/app/build.gradle
-          sed -i 's/targetSdkVersion 35/targetSdkVersion 33/g' android/app/build.gradle
+          sed -i 's/compileSdkVersion 35/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion 35/targetSdkVersion 34/g' android/app/build.gradle
           grep -E 'compileSdkVersion|targetSdkVersion' android/app/build.gradle
 
       - name: Flutter pub get
