@@ -249,7 +249,6 @@ class PlayerNotifier extends Notifier<PlayerState> {
   @override
   void dispose() {
     _dispose();
-    super.dispose();
   }
 }
 
