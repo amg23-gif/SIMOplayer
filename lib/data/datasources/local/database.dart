@@ -144,11 +144,11 @@ class AppDatabase extends _$AppDatabase {
           await m.createAll();
           // إنشاء ملف شخصي افتراضي
           await into(profilesTable).insert(ProfilesTableCompanion.insert(
-            id: const Value('default'),
-            name: const Value('الملف الافتراضي'),
+            id: 'default',
+            name: 'الملف الافتراضي',
             avatarEmoji: const Value('😊'),
             isDefault: const Value(true),
-            createdAt: Value(DateTime.now()),
+            createdAt: DateTime.now(),
           ));
         },
       );
