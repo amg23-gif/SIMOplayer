@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' show TextDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../data/datasources/local/database.dart';
@@ -110,7 +109,6 @@ class _RecordingItem extends StatelessWidget {
         recording.channelName,
         style: const TextStyle(
             fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w600),
-        textDirection: TextDirection.rtl,
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
