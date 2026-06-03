@@ -42,7 +42,6 @@ dependencies:
   # مشغل الفيديو
   video_player: ^2.8.2
   chewie: ^1.7.4
-  better_player: ^0.0.84
 
   # الشبكة
   dio: ^5.4.0
