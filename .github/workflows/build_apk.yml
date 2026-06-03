@@ -30,8 +30,7 @@ jobs:
       - name: Install Android SDK Platform 34
         run: |
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-34" \
-            "build-tools;34.0.0" 2>&1 | tail -5
+            "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
       - name: Create google-services.json
         run: |
@@ -43,17 +42,15 @@ jobs:
               "project_id": "simo-player-demo",
               "storage_bucket": "simo-player-demo.appspot.com"
             },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
-                  "android_client_info": { "package_name": "com.simo.player" }
-                },
-                "oauth_client": [],
-                "api_key": [{ "current_key": "AIzaDemo00000000000000000000000000000000" }],
-                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
-              }
-            ],
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                "android_client_info": { "package_name": "com.simo.player" }
+              },
+              "oauth_client": [],
+              "api_key": [{ "current_key": "AIzaDemo00000000000000000000000000000000" }],
+              "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+            }],
             "configuration_version": "1"
           }
           GSJSON
@@ -64,9 +61,7 @@ jobs:
           import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
           import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
           class DefaultFirebaseOptions {
-            static FirebaseOptions get currentPlatform {
-              return android;
-            }
+            static FirebaseOptions get currentPlatform { return android; }
             static const FirebaseOptions android = FirebaseOptions(
               apiKey: 'AIzaDemo00000000000000000000000000000000',
               appId: '1:000000000000:android:0000000000000000000000',
@@ -76,6 +71,25 @@ jobs:
             );
           }
           DARTEOF
+
+      - name: Create mipmap launcher icons
+        run: |
+          for dpi in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            mkdir -p android/app/src/main/res/$dpi
+            case $dpi in
+              mipmap-mdpi)    size=48  ;;
+              mipmap-hdpi)    size=72  ;;
+              mipmap-xhdpi)   size=96  ;;
+              mipmap-xxhdpi)  size=144 ;;
+              mipmap-xxxhdpi) size=192 ;;
+            esac
+            convert -size ${size}x${size} xc:#1a1a2e \
+              -fill '#e94560' -draw "circle $((size/2)),$((size/2)) $((size/2)),$((size/4))" \
+              -fill white -pointsize $((size/3)) -gravity Center -annotate 0 "S" \
+              android/app/src/main/res/$dpi/ic_launcher.png
+          done
+          echo "Icons created:"
+          find android/app/src/main/res -name "ic_launcher.png" | sort
 
       - name: Patch build.gradle to use SDK 34
         run: |
@@ -113,7 +127,7 @@ jobs:
           name: "SIMO Player v1.0.0"
           body: |
             ## SIMO Player v1.0.0
-            حمّل ملف APK من الأسفل وثبّته على هاتفك مباشرة.
+            حمّل ملف APK وثبّته على هاتفك مباشرة.
           files: build/app/outputs/flutter-apk/SIMOPlayer-v1.0.0.apk
           draft: false
           prerelease: false
