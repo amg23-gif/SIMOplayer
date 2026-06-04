@@ -51,7 +51,7 @@ import 'package:flutter/material.dart';
         final source = Source(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           name: name.isNotEmpty ? name : 'قائمة M3U',
-          type: SourceType.m3u,
+          type: SourceType.m3uUrl,
           m3uUrl: url,
         );
         await ref.read(channelsNotifierProvider.notifier).addSource(source);
