@@ -1,274 +1,418 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../providers/channels_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../widgets/channel_card.dart';
-import '../../widgets/continue_watching_section.dart';
-import '../../widgets/app_bottom_nav.dart';
-import '../../widgets/shimmer_loading.dart';
+  import 'package:flutter_riverpod/flutter_riverpod.dart';
+  import 'package:go_router/go_router.dart';
+  import 'package:cached_network_image/cached_network_image.dart';
+  import '../../../core/constants/app_constants.dart';
+  import '../../providers/channels_provider.dart';
+  import '../../../domain/entities/channel.dart';
 
-class HomeScreen extends ConsumerWidget {
-  const HomeScreen({super.key});
+  // Category sidebar items
+  const _categories = [
+    {'icon': Icons.live_tv, 'label': 'بث مباشر'},
+    {'icon': Icons.movie, 'label': 'أفلام'},
+    {'icon': Icons.video_library, 'label': 'مسلسلات'},
+    {'icon': Icons.star, 'label': 'المفضلة'},
+    {'icon': Icons.history, 'label': 'السجل'},
+    {'icon': Icons.search, 'label': 'بحث'},
+    {'icon': Icons.settings, 'label': 'إعدادات'},
+  ];
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final channelsAsync = ref.watch(channelsProvider);
-    final favoritesAsync = ref.watch(favoritesProvider);
-    final categoriesAsync = ref.watch(categoriesProvider);
+  final _selectedCatProvider = StateProvider<int>((ref) => 0);
 
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // AppBar مخصص
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 60,
-            backgroundColor: const Color(0xFF0A0A0A),
-            title: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF00E5FF)],
-                    ),
-                  ),
-                  child: const Icon(Icons.play_arrow,
-                      color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'SIMO Player',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.search, color: Colors.white),
-                onPressed: () => context.push('/home/search'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white),
-                onPressed: () => context.push(AppConstants.routeSettings),
-              ),
-            ],
-          ),
+  class HomeScreen extends ConsumerWidget {
+    const HomeScreen({super.key});
 
-          // قسم متابعة المشاهدة
-          const SliverToBoxAdapter(child: ContinueWatchingSection()),
+    @override
+    Widget build(BuildContext context, WidgetRef ref) {
+      final selectedCat = ref.watch(_selectedCatProvider);
 
-          // قسم المفضلة
-          SliverToBoxAdapter(
-            child: favoritesAsync.when(
-              data: (favorites) {
-                if (favorites.isEmpty) return const SizedBox.shrink();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _SectionHeader(
-                      title: 'المفضلة',
-                      icon: Icons.favorite,
-                      iconColor: Colors.red,
-                      onMore: () =>
-                          context.push('/home/channels?category=favorites'),
-                    ),
-                    SizedBox(
-                      height: 150,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: favorites.take(10).length,
-                        itemBuilder: (ctx, i) => Padding(
-                          padding: const EdgeInsets.only(left: 12),
-                          child: ChannelCard(
-                            channel: favorites[i],
-                            compact: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                );
-              },
-              loading: () => const ShimmerRow(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          // قسم القنوات حسب التصنيف
-          SliverToBoxAdapter(
-            child: categoriesAsync.when(
-              data: (categories) => Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: categories.take(5).map((cat) {
-                  return _CategorySection(category: cat, ref: ref);
-                }).toList(),
-              ),
-              loading: () => const ShimmerLoading(),
-              error: (e, _) => const SizedBox.shrink(),
-            ),
-          ),
-
-          // زر إضافة مصدر إذا لم تكن هناك قنوات
-          SliverToBoxAdapter(
-            child: channelsAsync.when(
-              data: (channels) {
-                if (channels.isNotEmpty) return const SizedBox.shrink();
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(40),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.tv_off,
-                            size: 64, color: Colors.white24),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'لا توجد قنوات. أضف مصدراً للبدء.',
-                          style: TextStyle(
-                              fontFamily: 'Cairo',
-                              color: Colors.white54,
-                              fontSize: 15),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: () =>
-                              context.push('/home/add-source'),
-                          icon: const Icon(Icons.add),
-                          label: const Text(
-                            'إضافة مصدر',
-                            style: TextStyle(fontFamily: 'Cairo'),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00E5FF),
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-        ],
-      ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 0),
-    );
-  }
-}
-
-class _CategorySection extends ConsumerWidget {
-  final String category;
-  final WidgetRef ref;
-
-  const _CategorySection({required this.category, required this.ref});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final channelsAsync = ref.watch(channelsByCategoryProvider(category));
-    return channelsAsync.when(
-      data: (channels) {
-        if (channels.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+      return Scaffold(
+        backgroundColor: const Color(0xFF0D1117),
+        body: Row(
           children: [
-            _SectionHeader(
-              title: category,
-              icon: Icons.tv,
-              onMore: () =>
-                  context.push('/home/channels?category=$category'),
-            ),
-            SizedBox(
-              height: 150,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: channels.take(10).length,
-                itemBuilder: (ctx, i) => Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: ChannelCard(channel: channels[i], compact: true),
-                ),
+            // ─── Sidebar ───────────────────────────────────────
+            _Sidebar(selectedCat: selectedCat, onSelect: (i) {
+              ref.read(_selectedCatProvider.notifier).state = i;
+              if (i == 5) context.go('${AppConstants.routeHome}/search');
+              if (i == 6) context.go(AppConstants.routeSettings);
+            }),
+
+            // ─── Main Content ───────────────────────────────────
+            Expanded(
+              child: Column(
+                children: [
+                  _TopBar(selectedCat: selectedCat),
+                  Expanded(
+                    child: selectedCat == 3
+                        ? const _FavoritesView()
+                        : const _ChannelGridView(),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
           ],
-        );
-      },
-      loading: () => const ShimmerRow(),
-      error: (_, __) => const SizedBox.shrink(),
-    );
+        ),
+      );
+    }
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color iconColor;
-  final VoidCallback? onMore;
+  // ───────────────────────────────────────────────────
+  // SIDEBAR
+  // ───────────────────────────────────────────────────
+  class _Sidebar extends StatelessWidget {
+    final int selectedCat;
+    final void Function(int) onSelect;
+    const _Sidebar({required this.selectedCat, required this.onSelect});
 
-  const _SectionHeader({
-    required this.title,
-    required this.icon,
-    this.iconColor = const Color(0xFF00E5FF),
-    this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          if (onMore != null)
-            TextButton(
-              onPressed: onMore,
-              child: const Text(
-                'عرض الكل',
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  color: Color(0xFF00E5FF),
-                  fontSize: 13,
+    @override
+    Widget build(BuildContext context) {
+      return Container(
+        width: 72,
+        color: const Color(0xFF161B22),
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            // Logo
+            Container(
+              width: 44,
+              height: 44,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1565C0), Color(0xFF0D47A1)],
                 ),
+              ),
+              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
+            ),
+            // Nav items
+            ...List.generate(_categories.length, (i) {
+              final cat = _categories[i];
+              final isSelected = selectedCat == i;
+              return GestureDetector(
+                onTap: () => onSelect(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF1565C0).withOpacity(0.25) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isSelected
+                        ? Border.all(color: const Color(0xFF1565C0).withOpacity(0.6), width: 1)
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        cat['icon'] as IconData,
+                        color: isSelected ? const Color(0xFF2196F3) : const Color(0xFF8B949E),
+                        size: 22,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        cat['label'] as String,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 9,
+                          color: isSelected ? const Color(0xFF2196F3) : const Color(0xFF8B949E),
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const Spacer(),
+            // Add source button
+            GestureDetector(
+              onTap: () => context.go('${AppConstants.routeHome}/add-source'),
+              child: Container(
+                width: 44,
+                height: 44,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF21262D),
+                ),
+                child: const Icon(Icons.add_rounded, color: Color(0xFF8B949E), size: 24),
               ),
             ),
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+          ],
+        ),
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────
+  // TOP BAR
+  // ───────────────────────────────────────────────────
+  class _TopBar extends StatelessWidget {
+    final int selectedCat;
+    const _TopBar({required this.selectedCat});
+
+    @override
+    Widget build(BuildContext context) {
+      final titles = ['البث المباشر', 'الأفلام', 'المسلسلات', 'المفضلة', 'السجل', 'بحث', 'إعدادات'];
+      return Container(
+        height: 60,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: const BoxDecoration(
+          color: Color(0xFF161B22),
+          border: Border(bottom: BorderSide(color: Color(0xFF30363D), width: 1)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              titles[selectedCat],
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
-              const SizedBox(width: 8),
-              Icon(icon, color: iconColor, size: 20),
+            ),
+            const Spacer(),
+            // EPG button
+            _NavBtn(
+              icon: Icons.calendar_today_rounded,
+              label: 'EPG',
+              onTap: () => context.go('${AppConstants.routeHome}/epg'),
+            ),
+            const SizedBox(width: 8),
+            // Search
+            _NavBtn(
+              icon: Icons.search_rounded,
+              label: '',
+              onTap: () => context.go('${AppConstants.routeHome}/search'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  class _NavBtn extends StatelessWidget {
+    final IconData icon;
+    final String label;
+    final VoidCallback onTap;
+    const _NavBtn({required this.icon, required this.label, required this.onTap});
+
+    @override
+    Widget build(BuildContext context) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF21262D),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: const Color(0xFF8B949E), size: 16),
+              if (label.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Color(0xFF8B949E))),
+              ]
             ],
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
   }
-}
+
+  // ───────────────────────────────────────────────────
+  // CHANNEL GRID
+  // ───────────────────────────────────────────────────
+  class _ChannelGridView extends ConsumerWidget {
+    const _ChannelGridView();
+
+    @override
+    Widget build(BuildContext context, WidgetRef ref) {
+      final channelsAsync = ref.watch(channelsProvider);
+
+      return channelsAsync.when(
+        loading: () => const _LoadingGrid(),
+        error: (_, __) => const _EmptyState(),
+        data: (channels) {
+          if (channels.isEmpty) return const _EmptyState();
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: 1.4,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: channels.length,
+            itemBuilder: (ctx, i) => _ChannelCard(channel: channels[i]),
+          );
+        },
+      );
+    }
+  }
+
+  class _ChannelCard extends StatelessWidget {
+    final Channel channel;
+    const _ChannelCard({required this.channel});
+
+    @override
+    Widget build(BuildContext context) {
+      return GestureDetector(
+        onTap: () => context.go(AppConstants.routePlayer, extra: {
+          'channelId': channel.id,
+          'streamUrl': channel.streamUrl,
+          'channelName': channel.name,
+          'channelLogo': channel.logoUrl,
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF30363D), width: 1),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: channel.logoUrl != null && channel.logoUrl!.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: channel.logoUrl!,
+                          fit: BoxFit.contain,
+                          placeholder: (_, __) => const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 30),
+                          errorWidget: (_, __, ___) => const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 30),
+                        )
+                      : const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 30),
+                ),
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0D1117),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
+                  ),
+                ),
+                child: Text(
+                  channel.name,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────
+  // FAVORITES
+  // ───────────────────────────────────────────────────
+  class _FavoritesView extends ConsumerWidget {
+    const _FavoritesView();
+
+    @override
+    Widget build(BuildContext context, WidgetRef ref) {
+      final favAsync = ref.watch(favoritesProvider);
+      return favAsync.when(
+        loading: () => const _LoadingGrid(),
+        error: (_, __) => const _EmptyState(),
+        data: (favs) {
+          if (favs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.star_border_rounded, color: Color(0xFF30363D), size: 60),
+                  SizedBox(height: 16),
+                  Text('لا توجد قنوات مفضلة بعد', style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF8B949E))),
+                ],
+              ),
+            );
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3, childAspectRatio: 1.4, crossAxisSpacing: 12, mainAxisSpacing: 12,
+            ),
+            itemCount: favs.length,
+            itemBuilder: (ctx, i) => _ChannelCard(channel: favs[i]),
+          );
+        },
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────
+  // HELPERS
+  // ───────────────────────────────────────────────────
+  class _LoadingGrid extends StatelessWidget {
+    const _LoadingGrid();
+    @override
+    Widget build(BuildContext context) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, childAspectRatio: 1.4, crossAxisSpacing: 12, mainAxisSpacing: 12,
+        ),
+        itemCount: 12,
+        itemBuilder: (_, __) => Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+
+  class _EmptyState extends StatelessWidget {
+    const _EmptyState();
+    @override
+    Widget build(BuildContext context) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.tv_off_rounded, color: Color(0xFF30363D), size: 64),
+            const SizedBox(height: 16),
+            const Text('لا توجد قنوات', style: TextStyle(fontFamily: 'Cairo', fontSize: 16, color: Color(0xFF8B949E))),
+            const SizedBox(height: 8),
+            const Text('أضف مصدر M3U للبدء', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF8B949E))),
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: () => context.go('${AppConstants.routeHome}/add-source'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0D47A1)]),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text('+ إضافة مصدر', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+  
