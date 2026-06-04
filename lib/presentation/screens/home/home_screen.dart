@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
     {'icon': Icons.movie,         'label': 'أفلام'},
     {'icon': Icons.video_library, 'label': 'مسلسلات'},
     {'icon': Icons.star,          'label': 'المفضلة'},
-    {'icon': Icons.history,       'label': 'السجل'},
     {'icon': Icons.search,        'label': 'بحث'},
     {'icon': Icons.settings,      'label': 'إعدادات'},
   ];
@@ -28,16 +27,20 @@ import 'package:flutter/material.dart';
         backgroundColor: const Color(0xFF0D1117),
         body: Row(
           children: [
-            _Sidebar(sel: sel, onSelect: (i) {
+            _Sidebar(sel: sel, onSelect: (i, ctx) {
               ref.read(_selCatProvider.notifier).state = i;
-              if (i == 5) context.go('${AppConstants.routeHome}/search');
-              if (i == 6) context.go(AppConstants.routeSettings);
+              if (i == 4) ctx.push('${AppConstants.routeHome}/search');
+              if (i == 5) ctx.push(AppConstants.routeSettings);
             }),
             Expanded(
               child: Column(
                 children: [
                   _TopBar(sel: sel),
-                  Expanded(child: sel == 3 ? const _FavoritesView() : const _ChannelGridView()),
+                  Expanded(
+                    child: sel == 3
+                        ? const _FavoritesView()
+                        : const _ChannelGridView(),
+                  ),
                 ],
               ),
             ),
@@ -47,23 +50,25 @@ import 'package:flutter/material.dart';
     }
   }
 
-  // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
   class _Sidebar extends StatelessWidget {
     final int sel;
-    final void Function(int) onSelect;
+    final void Function(int, BuildContext) onSelect;
     const _Sidebar({required this.sel, required this.onSelect});
 
     @override
     Widget build(BuildContext context) {
       return Container(
         width: 72,
-        color: const Color(0xFF161B22),
+        decoration: const BoxDecoration(
+          color: Color(0xFF161B22),
+          border: Border(right: BorderSide(color: Color(0xFF21262D))),
+        ),
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Container(
               width: 44, height: 44,
-              margin: const EdgeInsets.only(bottom: 20),
+              margin: const EdgeInsets.only(bottom: 24),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 gradient: const LinearGradient(
@@ -74,26 +79,26 @@ import 'package:flutter/material.dart';
               child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
             ),
             ...List.generate(_cats.length, (i) {
-              final c = _cats[i];
+              final cat = _cats[i];
               final active = sel == i;
               return GestureDetector(
-                onTap: () => onSelect(i),
+                onTap: () => onSelect(i, context),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
+                  duration: const Duration(milliseconds: 160),
                   margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                   decoration: BoxDecoration(
-                    color: active ? const Color(0xFF1565C0).withOpacity(0.22) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    color: active ? const Color(0xFF1565C0).withOpacity(0.2) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
                     border: active ? Border.all(color: const Color(0xFF1565C0).withOpacity(0.5)) : null,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(c['icon'] as IconData,
+                      Icon(cat['icon'] as IconData,
                         color: active ? const Color(0xFF2196F3) : const Color(0xFF8B949E), size: 22),
                       const SizedBox(height: 4),
-                      Text(c['label'] as String,
+                      Text(cat['label'] as String,
                         style: TextStyle(fontFamily: 'Cairo', fontSize: 9,
                           color: active ? const Color(0xFF2196F3) : const Color(0xFF8B949E),
                           fontWeight: active ? FontWeight.w700 : FontWeight.normal),
@@ -105,13 +110,14 @@ import 'package:flutter/material.dart';
             }),
             const Spacer(),
             GestureDetector(
-              onTap: () => context.go('${AppConstants.routeHome}/add-source'),
+              onTap: () => context.push('${AppConstants.routeHome}/add-source'),
               child: Container(
                 width: 44, height: 44,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   color: const Color(0xFF21262D),
+                  border: Border.all(color: const Color(0xFF30363D)),
                 ),
                 child: const Icon(Icons.add_rounded, color: Color(0xFF8B949E), size: 24),
               ),
@@ -122,107 +128,105 @@ import 'package:flutter/material.dart';
     }
   }
 
-  // ─── TOP BAR ─────────────────────────────────────────────────────────────────
   class _TopBar extends StatelessWidget {
     final int sel;
     const _TopBar({required this.sel});
 
     @override
     Widget build(BuildContext context) {
-      const titles = ['البث المباشر','الأفلام','المسلسلات','المفضلة','السجل','بحث','إعدادات'];
+      const titles = ['البث المباشر','الأفلام','المسلسلات','المفضلة','بحث','إعدادات'];
       return Container(
-        height: 60, padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: const BoxDecoration(
           color: Color(0xFF161B22),
-          border: Border(bottom: BorderSide(color: Color(0xFF30363D))),
+          border: Border(bottom: BorderSide(color: Color(0xFF21262D))),
         ),
         child: Row(
           children: [
-            Text(titles[sel], style: const TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+            Text(titles[sel],
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 18,
+                fontWeight: FontWeight.w700, color: Colors.white)),
             const Spacer(),
-            _Btn(icon: Icons.calendar_today_rounded, label: 'EPG', onTap: () => context.go('${AppConstants.routeHome}/epg')),
-            const SizedBox(width: 8),
-            _Btn(icon: Icons.search_rounded, label: '', onTap: () => context.go('${AppConstants.routeHome}/search')),
+            GestureDetector(
+              onTap: () => context.push('${AppConstants.routeHome}/search'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF21262D), borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF30363D))),
+                child: const Row(children: [
+                  Icon(Icons.search_rounded, color: Color(0xFF8B949E), size: 16),
+                  SizedBox(width: 6),
+                  Text('بحث', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Color(0xFF8B949E))),
+                ]),
+              ),
+            ),
           ],
         ),
       );
     }
   }
 
-  class _Btn extends StatelessWidget {
-    final IconData icon; final String label; final VoidCallback onTap;
-    const _Btn({required this.icon, required this.label, required this.onTap});
-    @override
-    Widget build(BuildContext context) => GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: const Color(0xFF21262D), borderRadius: BorderRadius.circular(8)),
-        child: Row(children: [
-          Icon(icon, color: const Color(0xFF8B949E), size: 16),
-          if (label.isNotEmpty) ...[const SizedBox(width: 4), Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Color(0xFF8B949E)))],
-        ]),
-      ),
-    );
-  }
-
-  // ─── CHANNEL GRID ─────────────────────────────────────────────────────────────
   class _ChannelGridView extends ConsumerWidget {
     const _ChannelGridView();
+
     @override
     Widget build(BuildContext context, WidgetRef ref) {
       final async = ref.watch(channelsProvider);
       return async.when(
         loading: () => const _ShimmerGrid(),
-        error: (_, __) => const _Empty(),
+        error: (_, __) => _EmptyState(onAdd: () => context.push('${AppConstants.routeHome}/add-source')),
         data: (channels) => channels.isEmpty
-            ? const _Empty()
+            ? _EmptyState(onAdd: () => context.push('${AppConstants.routeHome}/add-source'))
             : GridView.builder(
                 padding: const EdgeInsets.all(14),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, childAspectRatio: 1.4, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                  crossAxisCount: 3, childAspectRatio: 1.4,
+                  crossAxisSpacing: 12, mainAxisSpacing: 12),
                 itemCount: channels.length,
-                itemBuilder: (ctx, i) => _Card(ch: channels[i]),
+                itemBuilder: (ctx, i) => _ChannelCard(ch: channels[i]),
               ),
       );
     }
   }
 
-  // ─── FAVORITES ────────────────────────────────────────────────────────────────
   class _FavoritesView extends ConsumerWidget {
     const _FavoritesView();
+
     @override
     Widget build(BuildContext context, WidgetRef ref) {
       final async = ref.watch(favoritesProvider);
       return async.when(
         loading: () => const _ShimmerGrid(),
-        error: (_, __) => const _Empty(),
+        error: (_, __) => const Center(
+          child: Text('خطأ', style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF8B949E)))),
         data: (favs) => favs.isEmpty
-            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: const [
-                Icon(Icons.star_border_rounded, color: Color(0xFF30363D), size: 60),
+            ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.star_border_rounded, color: Color(0xFF21262D), size: 60),
                 SizedBox(height: 16),
                 Text('لا توجد قنوات مفضلة', style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF8B949E))),
               ]))
             : GridView.builder(
                 padding: const EdgeInsets.all(14),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, childAspectRatio: 1.4, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                  crossAxisCount: 3, childAspectRatio: 1.4,
+                  crossAxisSpacing: 12, mainAxisSpacing: 12),
                 itemCount: favs.length,
-                itemBuilder: (ctx, i) => _Card(ch: favs[i]),
+                itemBuilder: (ctx, i) => _ChannelCard(ch: favs[i]),
               ),
       );
     }
   }
 
-  // ─── CHANNEL CARD ─────────────────────────────────────────────────────────────
-  class _Card extends StatelessWidget {
+  class _ChannelCard extends StatelessWidget {
     final Channel ch;
-    const _Card({required this.ch});
+    const _ChannelCard({required this.ch});
 
     @override
     Widget build(BuildContext context) {
       return GestureDetector(
-        onTap: () => context.go(AppConstants.routePlayer, extra: {
+        onTap: () => context.push(AppConstants.routePlayer, extra: {
           'channelId': ch.id,
           'streamUrl': ch.currentStreamUrl ?? '',
           'channelName': ch.name,
@@ -232,76 +236,84 @@ import 'package:flutter/material.dart';
           decoration: BoxDecoration(
             color: const Color(0xFF161B22),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF30363D)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: ch.logoUrl != null && ch.logoUrl!.isNotEmpty
-                      ? CachedNetworkImage(imageUrl: ch.logoUrl!, fit: BoxFit.contain,
-                          placeholder: (_, __) => const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 26),
-                          errorWidget: (_, __, ___) => const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 26))
-                      : const Icon(Icons.live_tv, color: Color(0xFF30363D), size: 26),
-                ),
+            border: Border.all(color: const Color(0xFF21262D))),
+          child: Column(children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: ch.logoUrl != null && ch.logoUrl!.isNotEmpty
+                    ? CachedNetworkImage(imageUrl: ch.logoUrl!, fit: BoxFit.contain,
+                        placeholder: (_, __) => const Icon(Icons.live_tv, color: Color(0xFF21262D), size: 28),
+                        errorWidget: (_, __, ___) => const Icon(Icons.live_tv, color: Color(0xFF21262D), size: 28))
+                    : const Icon(Icons.live_tv, color: Color(0xFF21262D), size: 28),
               ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0D1117),
-                  borderRadius: BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)),
-                ),
-                child: Text(ch.name,
-                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0D1117),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10))),
+              child: Text(ch.name,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 10,
+                  color: Colors.white, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ]),
         ),
       );
     }
   }
 
-  // ─── HELPERS ──────────────────────────────────────────────────────────────────
   class _ShimmerGrid extends StatelessWidget {
     const _ShimmerGrid();
     @override
     Widget build(BuildContext context) => GridView.builder(
       padding: const EdgeInsets.all(14),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, childAspectRatio: 1.4, crossAxisSpacing: 12, mainAxisSpacing: 12),
+        crossAxisCount: 3, childAspectRatio: 1.4,
+        crossAxisSpacing: 12, mainAxisSpacing: 12),
       itemCount: 12,
       itemBuilder: (_, __) => Container(
         decoration: BoxDecoration(color: const Color(0xFF161B22), borderRadius: BorderRadius.circular(10))),
     );
   }
 
-  class _Empty extends StatelessWidget {
-    const _Empty();
+  class _EmptyState extends StatelessWidget {
+    final VoidCallback onAdd;
+    const _EmptyState({required this.onAdd});
+
     @override
-    Widget build(BuildContext context) => Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.tv_off_rounded, color: Color(0xFF30363D), size: 64),
-        const SizedBox(height: 16),
-        const Text('لا توجد قنوات', style: TextStyle(fontFamily: 'Cairo', fontSize: 16, color: Color(0xFF8B949E))),
-        const SizedBox(height: 8),
-        const Text('أضف مصدر M3U للبدء', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF8B949E))),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: () => context.go('${AppConstants.routeHome}/add-source'),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0D47A1)]),
-              borderRadius: BorderRadius.circular(10),
+    Widget build(BuildContext context) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.tv_off_rounded, color: Color(0xFF21262D), size: 72),
+          const SizedBox(height: 16),
+          const Text('لا توجد قنوات',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 18, color: Color(0xFF8B949E))),
+          const SizedBox(height: 8),
+          const Text('أضف مصدر M3U لتظهر القنوات هنا',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF8B949E))),
+          const SizedBox(height: 28),
+          GestureDetector(
+            onTap: onAdd,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0D47A1)]),
+                borderRadius: BorderRadius.circular(12)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('إضافة مصدر M3U',
+                  style: TextStyle(fontFamily: 'Cairo', color: Colors.white,
+                    fontWeight: FontWeight.w700, fontSize: 15)),
+              ]),
             ),
-            child: const Text('+ إضافة مصدر', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w700)),
           ),
-        ),
-      ]),
-    );
+        ]),
+      );
+    }
   }
   
