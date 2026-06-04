@@ -1,76 +1,47 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
-// مزود حالة المصادقة من Firebase
-final authStateProvider = StreamProvider<User?>((ref) {
-  return FirebaseAuth.instance.authStateChanges();
+// نموذج المستخدم المبسّط (بدون Firebase)
+class AppUser {
+  final String uid;
+  final String? displayName;
+  final String? email;
+  final String? photoURL;
+  final bool isAnonymous;
+
+  const AppUser({
+    required this.uid,
+    this.displayName,
+    this.email,
+    this.photoURL,
+    this.isAnonymous = true,
+  });
+}
+
+// مزود المستخدم الحالي (دائماً مجهول)
+final currentUserProvider = Provider<AppUser?>((ref) {
+  return const AppUser(uid: 'local', isAnonymous: true);
 });
 
-// مزود المستخدم الحالي
-final currentUserProvider = Provider<User?>((ref) {
-  return ref.watch(authStateProvider).valueOrNull;
-});
-
-// خدمة المصادقة
+// خدمة المصادقة المبسّطة (بدون Firebase)
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-
-  // تسجيل الدخول بـ Google
-  Future<UserCredential?> signInWithGoogle() async {
-    try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      return await _auth.signInWithCredential(credential);
-    } catch (e) {
-      throw Exception('فشل تسجيل الدخول بـ Google: $e');
-    }
+  Future<void> signInAnonymously() async {
+    await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  // تسجيل الدخول بـ Apple
-  Future<UserCredential?> signInWithApple() async {
-    try {
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-      );
-
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
-      );
-
-      return await _auth.signInWithCredential(oauthCredential);
-    } catch (e) {
-      throw Exception('فشل تسجيل الدخول بـ Apple: $e');
-    }
+  // ستُفعَّل مستقبلاً عند إعداد Firebase
+  Future<void> signInWithGoogle() async {
+    throw Exception('سجّل الدخول كضيف الآن — ميزة Google متاحة قريباً');
   }
 
-  // الدخول كمجهول
-  Future<UserCredential?> signInAnonymously() async {
-    return await _auth.signInAnonymously();
+  Future<void> signInWithApple() async {
+    throw Exception('سجّل الدخول كضيف الآن — ميزة Apple متاحة قريباً');
   }
 
-  // تسجيل الخروج
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _googleSignIn.signOut(),
-    ]);
+    await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  User? get currentUser => _auth.currentUser;
+  bool get isSignedIn => true;
 }
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());

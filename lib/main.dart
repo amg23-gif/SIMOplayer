@@ -16,14 +16,20 @@ import 'presentation/providers/auth_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تهيئة Firebase
-  await Firebase.initializeApp();
+  // تهيئة Firebase (اختيارية — إذا لم تكن مُهيأة يعمل التطبيق بدونها)
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('⚠️ Firebase غير مُهيأ، سيعمل التطبيق بدون المزامنة السحابية: $e');
+  }
 
   // تهيئة قاعدة البيانات المحلية
   final database = AppDatabase();
 
   // إبقاء الشاشة مضاءة أثناء التشغيل
-  await WakelockPlus.enable();
+  try {
+    await WakelockPlus.enable();
+  } catch (_) {}
 
   // تحديد اتجاهات الشاشة المدعومة
   await SystemChrome.setPreferredOrientations([
@@ -51,20 +57,15 @@ class SimoPlayerApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      // معلومات التطبيق
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
-
-      // الثيم
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
       themeMode: settings.themeMode,
-
-      // الترجمة والتعريب
       locale: settings.locale,
       supportedLocales: const [
-        Locale('ar', 'SA'), // العربية
-        Locale('en', 'US'), // الإنجليزية
+        Locale('ar', 'SA'),
+        Locale('en', 'US'),
       ],
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -72,8 +73,6 @@ class SimoPlayerApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-
-      // التوجيه
       routerConfig: router,
     );
   }

@@ -33,18 +33,26 @@ class Source extends Equatable {
     this.isActive = true,
   });
 
+  // تنظيف رابط السيرفر (إزالة الشرطة المائلة الزائدة في النهاية)
+  String? get _cleanServerUrl {
+    if (serverUrl == null) return null;
+    return serverUrl!.trimRight().replaceAll(RegExp(r'/+$'), '');
+  }
+
   // بناء رابط Xtream Codes M3U
   String? get xtreamM3uUrl {
     if (type != SourceType.xtreamCodes) return null;
-    if (serverUrl == null || username == null || password == null) return null;
-    return '$serverUrl/get.php?username=$username&password=$password&type=m3u_plus';
+    final srv = _cleanServerUrl;
+    if (srv == null || username == null || password == null) return null;
+    return '$srv/get.php?username=$username&password=$password&type=m3u_plus&output=ts';
   }
 
-  // بناء رابط Xtream Codes API
+  // بناء رابط Xtream Codes API للتحقق من بيانات الدخول
   String? get xtreamApiUrl {
     if (type != SourceType.xtreamCodes) return null;
-    if (serverUrl == null || username == null || password == null) return null;
-    return '$serverUrl/player_api.php?username=$username&password=$password';
+    final srv = _cleanServerUrl;
+    if (srv == null || username == null || password == null) return null;
+    return '$srv/player_api.php?username=$username&password=$password';
   }
 
   // الرابط الفعلي للتحميل

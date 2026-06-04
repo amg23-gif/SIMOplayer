@@ -2,28 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_constants.dart';
-
-// بيانات الغرفة
-class WatchPartyRoom {
-  final String code;
-  final String hostUserId;
-  final String? streamUrl;
-  final Duration position;
-  final bool isPlaying;
-  final List<String> participants;
-
-  const WatchPartyRoom({
-    required this.code,
-    required this.hostUserId,
-    this.streamUrl,
-    this.position = Duration.zero,
-    this.isPlaying = false,
-    this.participants = const [],
-  });
-}
 
 class WatchPartyScreen extends ConsumerStatefulWidget {
   final String? roomCode;
@@ -38,356 +18,246 @@ class WatchPartyScreen extends ConsumerStatefulWidget {
 class _WatchPartyScreenState extends ConsumerState<WatchPartyScreen> {
   final _codeCtrl = TextEditingController();
   String? _activeRoomCode;
-  bool _isHost = false;
-  bool _isSyncing = false;
   int _participantCount = 1;
-  DatabaseReference? _roomRef;
 
   @override
   void initState() {
     super.initState();
     if (widget.roomCode != null) {
-      _joinRoom(widget.roomCode!);
+      setState(() => _activeRoomCode = widget.roomCode);
     }
-  }
-
-  // إنشاء غرفة جديدة
-  Future<void> _createRoom() async {
-    final code = _generateCode();
-    final db = FirebaseDatabase.instance;
-    _roomRef = db.ref('${AppConstants.rtdbWatchParties}/$code');
-
-    await _roomRef!.set({
-      'code': code,
-      'streamUrl': widget.streamUrl ?? '',
-      'position': 0,
-      'isPlaying': false,
-      'participants': ['host'],
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-    });
-
-    _roomRef!.onValue.listen((event) {
-      if (!mounted) return;
-      final data = event.snapshot.value as Map?;
-      if (data != null) {
-        setState(() {
-          _participantCount =
-              (data['participants'] as List?)?.length ?? 1;
-        });
-      }
-    });
-
-    setState(() {
-      _activeRoomCode = code;
-      _isHost = true;
-    });
-  }
-
-  // الانضمام لغرفة موجودة
-  Future<void> _joinRoom(String code) async {
-    setState(() => _isSyncing = true);
-    final db = FirebaseDatabase.instance;
-    _roomRef = db.ref('${AppConstants.rtdbWatchParties}/$code');
-
-    final snapshot = await _roomRef!.get();
-    if (!snapshot.exists) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('غرفة غير موجودة', style: TextStyle(fontFamily: 'Cairo')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      setState(() => _isSyncing = false);
-      return;
-    }
-
-    _roomRef!.onValue.listen((event) {
-      if (!mounted) return;
-      final data = event.snapshot.value as Map?;
-      if (data != null) {
-        setState(() {
-          _participantCount = (data['participants'] as List?)?.length ?? 1;
-          _isSyncing = false;
-        });
-      }
-    });
-
-    setState(() {
-      _activeRoomCode = code;
-      _isHost = false;
-      _isSyncing = false;
-    });
-  }
-
-  // مغادرة الغرفة
-  Future<void> _leaveRoom() async {
-    if (_isHost && _activeRoomCode != null) {
-      await _roomRef?.remove();
-    }
-    setState(() {
-      _activeRoomCode = null;
-      _isHost = false;
-    });
-  }
-
-  String _generateCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rng = Random.secure();
-    return List.generate(6, (_) => chars[rng.nextInt(chars.length)]).join();
   }
 
   @override
   void dispose() {
     _codeCtrl.dispose();
-    if (_isHost) _roomRef?.remove();
     super.dispose();
+  }
+
+  String _generateCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rnd = Random.secure();
+    return List.generate(6, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+
+  void _createRoom() {
+    final code = _generateCode();
+    setState(() {
+      _activeRoomCode = code;
+      _participantCount = 1;
+    });
+  }
+
+  void _joinRoom(String code) {
+    setState(() {
+      _activeRoomCode = code.toUpperCase().trim();
+      _participantCount = 2;
+    });
+  }
+
+  void _shareCode() {
+    if (_activeRoomCode == null) return;
+    Share.share('انضم إلى غرفة مشاهدتي على SIMO Player\nالرمز: $_activeRoomCode');
+  }
+
+  void _leaveRoom() {
+    setState(() {
+      _activeRoomCode = null;
+      _participantCount = 1;
+      _codeCtrl.clear();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF090D18),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0A0A),
-        title: const Text('غرفة مشاهدة جماعية',
-            style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+        backgroundColor: const Color(0xFF0E1526),
+        title: const Text('غرفة المشاهدة الجماعية',
+            style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 16)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: _activeRoomCode == null
-            ? _buildJoinOrCreate()
-            : _buildActiveRoom(),
-      ),
+      body: _activeRoomCode != null
+          ? _ActiveRoom(
+              code: _activeRoomCode!,
+              participants: _participantCount,
+              onShare: _shareCode,
+              onLeave: _leaveRoom,
+            )
+          : _JoinOrCreate(
+              ctrl: _codeCtrl,
+              onCreateRoom: _createRoom,
+              onJoinRoom: () {
+                if (_codeCtrl.text.trim().length >= 4) {
+                  _joinRoom(_codeCtrl.text);
+                }
+              },
+            ),
     );
   }
+}
 
-  Widget _buildJoinOrCreate() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
+class _JoinOrCreate extends StatelessWidget {
+  final TextEditingController ctrl;
+  final VoidCallback onCreateRoom;
+  final VoidCallback onJoinRoom;
+  const _JoinOrCreate({required this.ctrl, required this.onCreateRoom, required this.onJoinRoom});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(children: [
         const SizedBox(height: 20),
-        // أيقونة
         Container(
-          width: 80,
-          height: 80,
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF1A1A1A),
-            border: Border.all(color: const Color(0xFF00E5FF), width: 2),
+            color: const Color(0xFF1E6CF5).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E6CF5).withOpacity(0.3)),
           ),
-          child: const Icon(Icons.people, color: Color(0xFF00E5FF), size: 40),
+          child: const Column(children: [
+            Icon(Icons.groups_rounded, color: Color(0xFF4D8EFF), size: 48),
+            SizedBox(height: 12),
+            Text('شاهد مع أصدقائك', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            SizedBox(height: 6),
+            Text('أنشئ غرفة أو انضم لغرفة موجودة لمشاهدة IPTV معاً',
+                style: TextStyle(fontFamily: 'Cairo', color: Colors.white54, fontSize: 13),
+                textAlign: TextAlign.center),
+          ]),
         ),
-        const SizedBox(height: 20),
-        const Text(
-          'شاهد مع أصدقائك',
-          style: TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'أنشئ غرفة وشارك الرمز مع صديقك لمزامنة المشاهدة',
-          style: TextStyle(fontFamily: 'Cairo', color: Colors.white54, fontSize: 13),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 40),
-
-        // إنشاء غرفة
+        const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
-          height: 52,
           child: ElevatedButton.icon(
-            onPressed: _createRoom,
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('إنشاء غرفة جديدة',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            onPressed: onCreateRoom,
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            label: const Text('إنشاء غرفة جديدة', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00E5FF),
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              backgroundColor: const Color(0xFF1E6CF5),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
-        const SizedBox(height: 20),
-
-        // فاصل
-        const Row(
-          children: [
-            Expanded(child: Divider(color: Colors.white24)),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('أو', style: TextStyle(fontFamily: 'Cairo', color: Colors.white38)),
-            ),
-            Expanded(child: Divider(color: Colors.white24)),
-          ],
-        ),
-        const SizedBox(height: 20),
-
-        // الانضمام لغرفة
-        TextField(
-          controller: _codeCtrl,
-          textAlign: TextAlign.center,
-          textCapitalization: TextCapitalization.characters,
-          style: const TextStyle(
-              fontFamily: 'Cairo', color: Colors.white, fontSize: 20, letterSpacing: 4),
-          decoration: InputDecoration(
-            hintText: 'أدخل رمز الغرفة',
-            hintStyle: const TextStyle(
-                fontFamily: 'Cairo', color: Colors.white38, fontSize: 16),
-            filled: true,
-            fillColor: const Color(0xFF1A1A1A),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+        const SizedBox(height: 24),
+        const Row(children: [
+          Expanded(child: Divider(color: Color(0xFF1C2540))),
+          Padding(padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text('أو', style: TextStyle(fontFamily: 'Cairo', color: Colors.white38))),
+          Expanded(child: Divider(color: Color(0xFF1C2540))),
+        ]),
+        const SizedBox(height: 24),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0E1526),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF1C2540)),
+          ),
+          child: TextField(
+            controller: ctrl,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 22, letterSpacing: 4),
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              hintText: 'أدخل رمز الغرفة',
+              hintStyle: TextStyle(fontFamily: 'Cairo', color: Color(0xFF4A5568), fontSize: 14, letterSpacing: 0),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          height: 48,
-          child: OutlinedButton(
-            onPressed: () {
-              if (_codeCtrl.text.length >= 4) {
-                _joinRoom(_codeCtrl.text.trim().toUpperCase());
-              }
-            },
+          child: OutlinedButton.icon(
+            onPressed: onJoinRoom,
+            icon: const Icon(Icons.login_rounded),
+            label: const Text('الانضمام للغرفة', style: TextStyle(fontFamily: 'Cairo', fontSize: 15)),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF00E5FF),
-              side: const BorderSide(color: Color(0xFF00E5FF)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              foregroundColor: const Color(0xFF4D8EFF),
+              side: const BorderSide(color: Color(0xFF1E6CF5)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('الانضمام للغرفة',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
           ),
         ),
-      ],
+      ]),
     );
   }
+}
 
-  Widget _buildActiveRoom() {
-    return Column(
-      children: [
-        const SizedBox(height: 20),
-        // حالة المزامنة
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.green.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.sync, color: Colors.green, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                _isSyncing ? 'جاري المزامنة...' : 'متزامن',
-                style: const TextStyle(fontFamily: 'Cairo', color: Colors.green, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 30),
+class _ActiveRoom extends StatelessWidget {
+  final String code;
+  final int participants;
+  final VoidCallback onShare;
+  final VoidCallback onLeave;
+  const _ActiveRoom({required this.code, required this.participants, required this.onShare, required this.onLeave});
 
-        // رمز الغرفة
-        const Text('رمز الغرفة',
-            style: TextStyle(fontFamily: 'Cairo', color: Colors.white54, fontSize: 14)),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
-          ),
-          child: Text(
-            _activeRoomCode ?? '',
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF00E5FF),
-              letterSpacing: 8,
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E1526),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF1E6CF5).withOpacity(0.4)),
             ),
+            child: Column(children: [
+              const Text('رمز الغرفة', style: TextStyle(fontFamily: 'Cairo', color: Colors.white54, fontSize: 14)),
+              const SizedBox(height: 12),
+              Text(code, style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 6)),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.people_rounded, color: Color(0xFF4D8EFF), size: 18),
+                const SizedBox(width: 6),
+                Text('$participants مشارك', style: const TextStyle(fontFamily: 'Cairo', color: Color(0xFF4D8EFF))),
+              ]),
+            ]),
           ),
-        ),
-        const SizedBox(height: 20),
-
-        // عدد المشاركين
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.people, color: Colors.white54, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              '$_participantCount مشاركون',
-              style: const TextStyle(fontFamily: 'Cairo', color: Colors.white54),
-            ),
-          ],
-        ),
-        const SizedBox(height: 30),
-
-        // أزرار المشاركة
-        Row(
-          children: [
+          const SizedBox(height: 32),
+          Row(children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: _activeRoomCode ?? ''));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('تم نسخ الرمز',
-                              style: TextStyle(fontFamily: 'Cairo')),
-                          backgroundColor: Color(0xFF1A1A1A)),
-                    );
-                  }
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: code));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('تم نسخ الرمز!', style: TextStyle(fontFamily: 'Cairo')),
+                    duration: Duration(seconds: 2),
+                  ));
                 },
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('نسخ', style: TextStyle(fontFamily: 'Cairo')),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white30),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text('نسخ الرمز', style: TextStyle(fontFamily: 'Cairo')),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E6CF5), foregroundColor: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Share.share(
-                    'انضم إلى غرفة المشاهدة في SIMO Player بالرمز: $_activeRoomCode'),
-                icon: const Icon(Icons.share, size: 16),
+              child: ElevatedButton.icon(
+                onPressed: onShare,
+                icon: const Icon(Icons.share_rounded, size: 18),
                 label: const Text('مشاركة', style: TextStyle(fontFamily: 'Cairo')),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF00E5FF),
-                  side: const BorderSide(color: Color(0xFF00E5FF)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1C2540), foregroundColor: Colors.white),
               ),
             ),
-          ],
-        ),
-
-        const Spacer(),
-
-        // مغادرة الغرفة
-        SizedBox(
-          width: double.infinity,
-          child: TextButton.icon(
-            onPressed: _leaveRoom,
-            icon: const Icon(Icons.exit_to_app, color: Colors.red),
-            label: const Text('مغادرة الغرفة',
-                style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
+          ]),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: onLeave,
+            icon: const Icon(Icons.exit_to_app_rounded, color: Colors.redAccent, size: 18),
+            label: const Text('مغادرة الغرفة', style: TextStyle(fontFamily: 'Cairo', color: Colors.redAccent)),
           ),
-        ),
-        const SizedBox(height: 20),
-      ],
+        ]),
+      ),
     );
   }
 }
