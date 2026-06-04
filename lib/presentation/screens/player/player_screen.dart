@@ -34,27 +34,23 @@ import 'package:flutter/material.dart';
 
     @override
     void dispose() {
-      // إعادة ضبط الاتجاه والواجهة عند مغادرة شاشة المشغل
       ref.read(playerProvider.notifier).stopAndReset();
       super.dispose();
     }
 
     Future<void> _loadChannel() async {
-      // ابحث عن القناة في قاعدة البيانات أولاً
       final channelsAsync = ref.read(channelsProvider);
       Channel? channel;
-
       channelsAsync.whenData((channels) {
         channel = channels.where((c) => c.id == widget.channelId).firstOrNull;
       });
 
-      // إذا لم توجد في DB، أنشئ قناة مؤقتة من البيانات الممررة
       channel ??= Channel(
         id: widget.channelId.isNotEmpty ? widget.channelId : 'temp',
         name: widget.channelName,
         logoUrl: widget.channelLogo,
         category: '',
-        streamUrls: [widget.streamUrl],
+        streamUrls: widget.streamUrl.isNotEmpty ? [widget.streamUrl] : [],
       );
 
       await ref.read(playerProvider.notifier).playChannel(channel!);
@@ -69,21 +65,24 @@ import 'package:flutter/material.dart';
       }
     }
 
+    void _handleBack() {
+      final playerState = ref.read(playerProvider);
+      if (playerState.isFullscreen) {
+        ref.read(playerProvider.notifier).toggleFullscreen();
+      } else {
+        _goBack();
+      }
+    }
+
     @override
     Widget build(BuildContext context) {
       final playerState = ref.watch(playerProvider);
 
+      // Flutter 3.22: use onPopInvoked (onPopInvokedWithResult needs Flutter 3.24+)
       return PopScope(
-        // ✅ FIX: زر الرجوع الفيزيائي يعمل دائماً
         canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            if (playerState.isFullscreen) {
-              ref.read(playerProvider.notifier).toggleFullscreen();
-            } else {
-              _goBack();
-            }
-          }
+        onPopInvoked: (didPop) {
+          if (!didPop) _handleBack();
         },
         child: Scaffold(
           backgroundColor: Colors.black,
@@ -92,12 +91,10 @@ import 'package:flutter/material.dart';
             onTap: () => ref.read(playerProvider.notifier).toggleControls(),
             child: Stack(
               children: [
-                // ─── الفيديو ─────────────────────────────────────────
-                Positioned.fill(
-                  child: _VideoView(playerState: playerState),
-                ),
+                // ─── الفيديو ──────────────────────────────────────
+                Positioned.fill(child: _VideoView(playerState: playerState)),
 
-                // ─── زر رجوع دائم (يظهر دائماً في الأعلى) ────────────
+                // ─── زر الرجوع — يظهر دائماً ─────────────────────
                 Positioned(
                   top: 0,
                   left: 0,
@@ -107,26 +104,19 @@ import 'package:flutter/material.dart';
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: Row(
                         children: [
-                          // ✅ زر الرجوع يظهر دائماً (مش مشروط بـ showControls)
                           Material(
                             color: Colors.black54,
                             shape: const CircleBorder(),
                             child: InkWell(
                               customBorder: const CircleBorder(),
-                              onTap: () {
-                                if (playerState.isFullscreen) {
-                                  ref.read(playerProvider.notifier).toggleFullscreen();
-                                } else {
-                                  _goBack();
-                                }
-                              },
+                              onTap: _handleBack,
                               child: const Padding(
                                 padding: EdgeInsets.all(10),
-                                child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
+                                child: Icon(Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.white, size: 22),
                               ),
                             ),
                           ),
-                          // اسم القناة (يظهر فقط عند إظهار الأدوات)
                           if (playerState.showControls) ...[
                             const SizedBox(width: 8),
                             if (widget.channelLogo != null)
@@ -135,20 +125,17 @@ import 'package:flutter/material.dart';
                                 child: CachedNetworkImage(
                                   imageUrl: widget.channelLogo!,
                                   width: 32, height: 32, fit: BoxFit.contain,
-                                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                                ),
+                                  errorWidget: (_, __, ___) => const SizedBox.shrink()),
                               ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                widget.channelName,
+                              child: Text(widget.channelName,
                                 style: const TextStyle(
-                                  fontFamily: 'Cairo', color: Colors.white,
-                                  fontSize: 16, fontWeight: FontWeight.bold,
+                                  fontFamily: 'Cairo', color: Colors.white, fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                   shadows: [Shadow(blurRadius: 8, color: Colors.black)],
                                 ),
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                              ),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
                             ),
                           ],
                         ],
@@ -157,37 +144,32 @@ import 'package:flutter/material.dart';
                   ),
                 ),
 
-                // ─── أدوات التحكم (تظهر عند اللمس) ──────────────────
-                if (playerState.showControls)
+                // ─── أدوات التحكم (عند اللمس) ────────────────────
+                if (playerState.showControls &&
+                    playerState.status != PlayerStatus.loading &&
+                    playerState.status != PlayerStatus.error)
                   Positioned.fill(
-                    child: _ControlsOverlay(
-                      playerState: playerState,
-                      onRetry: _loadChannel,
-                    ),
+                    child: _ControlsOverlay(playerState: playerState),
                   ),
 
-                // ─── حالة التحميل ─────────────────────────────────────
+                // ─── التحميل ─────────────────────────────────────
                 if (playerState.status == PlayerStatus.loading ||
                     playerState.status == PlayerStatus.switching)
                   Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(
-                          color: Color(0xFF1565C0), strokeWidth: 3),
-                        const SizedBox(height: 16),
-                        Text(
-                          playerState.status == PlayerStatus.switching
-                              ? 'جاري تجربة مصدر آخر...'
-                              : 'جاري التحميل...',
-                          style: const TextStyle(
-                            fontFamily: 'Cairo', color: Colors.white70, fontSize: 14),
-                        ),
-                      ],
-                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const CircularProgressIndicator(
+                        color: Color(0xFF1565C0), strokeWidth: 3),
+                      const SizedBox(height: 16),
+                      Text(
+                        playerState.status == PlayerStatus.switching
+                            ? 'جاري تجربة مصدر آخر...'
+                            : 'جاري التحميل...',
+                        style: const TextStyle(
+                          fontFamily: 'Cairo', color: Colors.white70, fontSize: 14)),
+                    ]),
                   ),
 
-                // ─── حالة الخطأ ───────────────────────────────────────
+                // ─── خطأ ─────────────────────────────────────────
                 if (playerState.status == PlayerStatus.error)
                   Center(
                     child: Container(
@@ -197,45 +179,35 @@ import 'package:flutter/material.dart';
                         color: Colors.black87,
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 52),
-                          const SizedBox(height: 12),
-                          Text(
-                            playerState.errorMessage ?? 'تعذّر تشغيل القناة',
-                            style: const TextStyle(
-                              fontFamily: 'Cairo', color: Colors.white, fontSize: 15),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: _loadChannel,
-                                icon: const Icon(Icons.refresh_rounded, size: 18),
-                                label: const Text('إعادة المحاولة',
-                                  style: TextStyle(fontFamily: 'Cairo')),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1565C0),
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              OutlinedButton(
-                                onPressed: _goBack,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  side: const BorderSide(color: Colors.white30),
-                                ),
-                                child: const Text('رجوع',
-                                  style: TextStyle(fontFamily: 'Cairo')),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.wifi_off_rounded,
+                          color: Colors.redAccent, size: 52),
+                        const SizedBox(height: 12),
+                        Text(
+                          playerState.errorMessage ?? 'تعذّر تشغيل القناة',
+                          style: const TextStyle(
+                            fontFamily: 'Cairo', color: Colors.white, fontSize: 15),
+                          textAlign: TextAlign.center),
+                        const SizedBox(height: 20),
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          ElevatedButton.icon(
+                            onPressed: _loadChannel,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('إعادة المحاولة',
+                              style: TextStyle(fontFamily: 'Cairo')),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              foregroundColor: Colors.white)),
+                          const SizedBox(width: 12),
+                          OutlinedButton(
+                            onPressed: _goBack,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Colors.white30)),
+                            child: const Text('رجوع',
+                              style: TextStyle(fontFamily: 'Cairo'))),
+                        ]),
+                      ]),
                     ),
                   ),
               ],
@@ -268,16 +240,14 @@ import 'package:flutter/material.dart';
     }
   }
 
-  // ─── طبقة أدوات التحكم ────────────────────────────────────────────
+  // ─── أدوات التحكم ─────────────────────────────────────────────────
   class _ControlsOverlay extends ConsumerWidget {
     final PlayerState playerState;
-    final VoidCallback onRetry;
-    const _ControlsOverlay({required this.playerState, required this.onRetry});
+    const _ControlsOverlay({required this.playerState});
 
     @override
     Widget build(BuildContext context, WidgetRef ref) {
       final isPlaying = playerState.status == PlayerStatus.playing;
-      final isFullscreen = playerState.isFullscreen;
 
       return Container(
         decoration: const BoxDecoration(
@@ -288,74 +258,53 @@ import 'package:flutter/material.dart';
             stops: [0, 0.3, 0.7, 1],
           ),
         ),
-        child: Column(
-          children: [
-            // مساحة الرأس (زر الرجوع معروض في Stack فوقه)
-            const SizedBox(height: 60),
-            const Spacer(),
-
-            // ─── أزرار التحكم الوسطى ───────────────────────────────
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // تقديم 10 ثوانٍ للخلف
+        child: Column(children: [
+          const SizedBox(height: 60),
+          const Spacer(),
+          // أزرار التشغيل
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            _CtrlBtn(
+              icon: Icons.replay_10_rounded, size: 36,
+              onTap: () => ref.read(playerProvider.notifier)
+                  .seekBy(const Duration(seconds: -10))),
+            const SizedBox(width: 32),
+            _CtrlBtn(
+              icon: isPlaying
+                  ? Icons.pause_circle_filled_rounded
+                  : Icons.play_circle_filled_rounded,
+              size: 64,
+              onTap: () => ref.read(playerProvider.notifier).togglePlayPause()),
+            const SizedBox(width: 32),
+            _CtrlBtn(
+              icon: Icons.forward_10_rounded, size: 36,
+              onTap: () => ref.read(playerProvider.notifier)
+                  .seekBy(const Duration(seconds: 10))),
+          ]),
+          const Spacer(),
+          // الشريط السفلي
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: SafeArea(
+              top: false,
+              child: Row(children: [
+                Text(_fmt(playerState.position),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo', color: Colors.white70, fontSize: 12)),
+                const Spacer(),
                 _CtrlBtn(
-                  icon: Icons.replay_10_rounded,
-                  size: 36,
-                  onTap: () => ref.read(playerProvider.notifier).seekBy(
-                    const Duration(seconds: -10)),
-                ),
-                const SizedBox(width: 32),
-                // تشغيل / توقف
-                _CtrlBtn(
-                  icon: isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
-                  size: 64,
-                  onTap: () => ref.read(playerProvider.notifier).togglePlayPause(),
-                ),
-                const SizedBox(width: 32),
-                // تقديم 10 ثوانٍ للأمام
-                _CtrlBtn(
-                  icon: Icons.forward_10_rounded,
-                  size: 36,
-                  onTap: () => ref.read(playerProvider.notifier).seekBy(
-                    const Duration(seconds: 10)),
-                ),
-              ],
+                  icon: playerState.isFullscreen
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  size: 26,
+                  onTap: () => ref.read(playerProvider.notifier).toggleFullscreen()),
+              ]),
             ),
-            const Spacer(),
-
-            // ─── الشريط السفلي ─────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: SafeArea(
-                top: false,
-                child: Row(
-                  children: [
-                    // جودة الصوت / مؤقت
-                    Text(
-                      _formatDuration(playerState.position),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo', color: Colors.white70, fontSize: 12),
-                    ),
-                    const Spacer(),
-                    // زر ملء الشاشة
-                    _CtrlBtn(
-                      icon: isFullscreen
-                          ? Icons.fullscreen_exit_rounded
-                          : Icons.fullscreen_rounded,
-                      size: 26,
-                      onTap: () => ref.read(playerProvider.notifier).toggleFullscreen(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ]),
       );
     }
 
-    String _formatDuration(Duration d) {
+    String _fmt(Duration d) {
       final h = d.inHours;
       final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
       final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -363,7 +312,6 @@ import 'package:flutter/material.dart';
     }
   }
 
-  // ─── زر تحكم دائري ────────────────────────────────────────────────
   class _CtrlBtn extends StatelessWidget {
     final IconData icon;
     final double size;
@@ -371,12 +319,10 @@ import 'package:flutter/material.dart';
     const _CtrlBtn({required this.icon, required this.size, required this.onTap});
 
     @override
-    Widget build(BuildContext context) {
-      return GestureDetector(
-        onTap: onTap,
-        child: Icon(icon, color: Colors.white, size: size,
-          shadows: const [Shadow(blurRadius: 10, color: Colors.black)]),
-      );
-    }
+    Widget build(BuildContext context) => GestureDetector(
+      onTap: onTap,
+      child: Icon(icon, color: Colors.white, size: size,
+        shadows: const [Shadow(blurRadius: 10, color: Colors.black)]),
+    );
   }
   
