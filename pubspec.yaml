@@ -1,7 +1,7 @@
 name: simo_player
 description: مشغل IPTV احترافي - SIMO Player
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -28,20 +28,13 @@ dependencies:
   path_provider: ^2.1.2
   path: ^1.9.0
 
-  # Firebase
+  # Firebase (اختياري - يعمل التطبيق بدونه)
   firebase_core: ^2.24.2
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.14.0
-  firebase_storage: ^11.6.0
-  firebase_database: ^10.4.0
 
-  # تسجيل الدخول
-  google_sign_in: ^6.2.1
-  sign_in_with_apple: ^5.0.0
-
-  # مشغل الفيديو
-  video_player: ^2.8.2
-  chewie: ^1.7.4
+  # مشغل الفيديو - media_kit (FFmpeg مثل VLC)
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  media_kit_libs_video: ^1.0.4
 
   # الشبكة
   dio: ^5.4.0
@@ -108,4 +101,3 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
-

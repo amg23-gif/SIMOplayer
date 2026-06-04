@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'core/constants/app_constants.dart';
@@ -11,27 +12,24 @@ import 'core/router/app_router.dart';
 import 'core/localization/app_localizations.dart';
 import 'data/datasources/local/database.dart';
 import 'presentation/providers/settings_provider.dart';
-import 'presentation/providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تهيئة Firebase (اختيارية — إذا لم تكن مُهيأة يعمل التطبيق بدونها)
+  // تهيئة media_kit (FFmpeg) - ضرورية
+  MediaKit.ensureInitialized();
+
+  // تهيئة Firebase (اختيارية)
   try {
     await Firebase.initializeApp();
   } catch (e) {
-    debugPrint('⚠️ Firebase غير مُهيأ، سيعمل التطبيق بدون المزامنة السحابية: $e');
+    debugPrint('⚠️ Firebase غير مُهيأ، يعمل التطبيق بدون مزامنة سحابية: $e');
   }
 
-  // تهيئة قاعدة البيانات المحلية
   final database = AppDatabase();
 
-  // إبقاء الشاشة مضاءة أثناء التشغيل
-  try {
-    await WakelockPlus.enable();
-  } catch (_) {}
+  try { await WakelockPlus.enable(); } catch (_) {}
 
-  // تحديد اتجاهات الشاشة المدعومة
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.landscapeLeft,
@@ -40,9 +38,7 @@ void main() async {
 
   runApp(
     ProviderScope(
-      overrides: [
-        databaseProvider.overrideWithValue(database),
-      ],
+      overrides: [databaseProvider.overrideWithValue(database)],
       child: const SimoPlayerApp(),
     ),
   );
@@ -63,10 +59,7 @@ class SimoPlayerApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme(),
       themeMode: settings.themeMode,
       locale: settings.locale,
-      supportedLocales: const [
-        Locale('ar', 'SA'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('ar', 'SA'), Locale('en', 'US')],
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
