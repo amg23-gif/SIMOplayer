@@ -72,55 +72,94 @@ jobs:
           }
           DARTEOF
 
-      - name: Create mipmap launcher icons using Python
+      - name: Create professional app icon
         run: |
           python3 << 'PYEOF'
-          import os, struct, zlib
-          def make_png(size):
+          import os, struct, zlib, math
+
+          def make_icon(size):
+              """Professional blue gradient icon with play button"""
               def chunk(name, data):
                   c = struct.pack('>I', len(data)) + name + data
                   return c + struct.pack('>I', zlib.crc32(name + data) & 0xffffffff)
+
               sig = b'\x89PNG\r\n\x1a\n'
               ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+
+              cx, cy = size / 2, size / 2
+              r = size / 2
               raw = b''
+
               for y in range(size):
-                  raw += b'\x00'
+                  row = b'\x00'
                   for x in range(size):
-                      cx, cy = x - size//2, y - size//2
-                      r = (size//2 - 2)**2
-                      raw += bytes([26, 26, 46]) if cx*cx + cy*cy <= r else bytes([233, 69, 96])
-              idat = chunk(b'IDAT', zlib.compress(raw))
+                      dx, dy = x - cx, y - cy
+                      dist = math.sqrt(dx*dx + dy*dy)
+
+                      # Rounded square background
+                      corner_r = size * 0.22
+                      ax, ay = abs(dx), abs(dy)
+                      in_rect = ax <= r - corner_r and ay <= r
+                      in_vert = ax <= r and ay <= r - corner_r
+                      in_corner = (ax - (r - corner_r))**2 + (ay - (r - corner_r))**2 <= corner_r**2 if ax > r - corner_r and ay > r - corner_r else False
+                      in_bg = in_rect or in_vert or in_corner
+
+                      if in_bg:
+                          # Blue gradient: top-left bright, bottom-right dark
+                          t = (x + y) / (2 * size)
+                          rb = int(21 + (13 - 21) * t)
+                          gb = int(101 + (71 - 101) * t)
+                          bb = int(192 + (161 - 192) * t)
+
+                          # Play triangle
+                          margin = size * 0.27
+                          tx = x - cx - size * 0.05
+                          ty = y - cy
+                          h = (size - 2 * margin) * 0.5
+                          in_play = (tx >= -h * 0.5 and
+                                     ty >= -h and ty <= h and
+                                     tx <= h - abs(ty))
+
+                          if in_play:
+                              row += bytes([255, 255, 255])
+                          else:
+                              row += bytes([max(0,rb), max(0,gb), max(0,bb)])
+                      else:
+                          row += bytes([0, 0, 0])
+                  raw += row
+
+              idat = chunk(b'IDAT', zlib.compress(raw, 6))
               iend = chunk(b'IEND', b'')
               return sig + ihdr + idat + iend
-          sizes = {'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192}
+
+          sizes = {
+              'mipmap-mdpi': 48, 'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192
+          }
           base = 'android/app/src/main/res'
           for folder, size in sizes.items():
               path = os.path.join(base, folder)
               os.makedirs(path, exist_ok=True)
               with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f:
-                  f.write(make_png(size))
+                  f.write(make_icon(size))
               print(f"Created {folder}/ic_launcher.png ({size}x{size})")
           PYEOF
 
-      - name: Upgrade AGP and Gradle to fix dexing issues
+      - name: Upgrade AGP + Gradle for Java 17 compat
         run: |
-          # Upgrade Android Gradle Plugin from 7.4.2 to 8.1.0
           sed -i "s/com.android.tools.build:gradle:7.4.2/com.android.tools.build:gradle:8.1.4/g" android/build.gradle
-          # Upgrade Gradle wrapper from 7.6.3 to 8.5
           sed -i "s|gradle-7.6.3-all.zip|gradle-8.5-all.zip|g" android/gradle/wrapper/gradle-wrapper.properties
-          # Use namespace in app build.gradle (required by AGP 8+)
-          echo "AGP and Gradle versions updated:"
           grep "com.android.tools.build:gradle" android/build.gradle
           grep "distributionUrl" android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Patch build.gradle for SDK 34 and Java 17
+      - name: Patch build.gradle for SDK 34 + Java 17
         run: |
           sed -i 's/compileSdkVersion 35/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion 35/targetSdkVersion 34/g' android/app/build.gradle
           sed -i "s/sourceCompatibility JavaVersion.VERSION_1_8/sourceCompatibility JavaVersion.VERSION_17/g" android/app/build.gradle
           sed -i "s/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_17/g" android/app/build.gradle
           sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" android/app/build.gradle
-          grep -E 'compileSdkVersion|targetSdkVersion|sourceCompatibility|jvmTarget' android/app/build.gradle
+          grep -E 'compileSdkVersion|targetSdkVersion|jvmTarget' android/app/build.gradle
 
       - name: Flutter pub get
         run: flutter pub get
@@ -132,29 +171,15 @@ jobs:
       - name: Build Debug APK
         run: flutter build apk --debug --no-shrink
         env:
-          FLUTTER_BUILD_NAME: '1.0.0'
-          FLUTTER_BUILD_NUMBER: '1'
+          FLUTTER_BUILD_NAME: '2.0.0'
+          FLUTTER_BUILD_NUMBER: '2'
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/SIMOPlayer-v1.0.0.apk
+        run: mv build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/SIMOPlayer-v2.0.0.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SIMOPlayer-APK
-          path: build/app/outputs/flutter-apk/SIMOPlayer-v1.0.0.apk
+          name: SIMOPlayer-APK-v2
+          path: build/app/outputs/flutter-apk/SIMOPlayer-v2.0.0.apk
           retention-days: 30
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.0
-          name: "SIMO Player v1.0.0"
-          body: |
-            ## SIMO Player v1.0.0
-            حمّل ملف APK وثبّته على هاتفك مباشرة.
-          files: build/app/outputs/flutter-apk/SIMOPlayer-v1.0.0.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
