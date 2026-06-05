@@ -6,32 +6,27 @@ import 'package:dio/io.dart';
 import '../../domain/entities/channel.dart';
 import '../../domain/entities/source.dart';
 
-// إنشاء Dio مع دعم SSL الكامل (بما في ذلك الشهادات الموقّعة ذاتياً)
+// إنشاء Dio مع دعم SSL الكامل
 Dio _buildDio() {
   final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 20),
+    connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 90),
-    sendTimeout: const Duration(seconds: 20),
+    sendTimeout: const Duration(seconds: 15),
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 11) SIMO-Player/1.0',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 11) SIMO-Player/2.0',
       'Accept': '*/*',
+      'Connection': 'keep-alive',
     },
   ));
-
-  // تجاوز التحقق من شهادات SSL لدعم خوادم IPTV
   (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
     final client = HttpClient();
-    client.badCertificateCallback =
-        (X509Certificate cert, String host, int port) => true;
+    client.badCertificateCallback = (_, __, ___) => true;
     return client;
   };
-
   return dio;
 }
 
-// محلل ملفات M3U
 class M3uParser {
-  // التحقق من بيانات Xtream Codes أولاً ثم تحميل القنوات
   static Future<List<Channel>> parseFromUrl(Source source) async {
     if (source.type == SourceType.xtreamCodes) {
       return _parseXtream(source);
@@ -39,75 +34,154 @@ class M3uParser {
     return _parseM3uUrl(source);
   }
 
-  // تحليل مصدر Xtream Codes
-  static Future<List<Channel>> _parseXtream(Source source) async {
-    final apiUrl = source.xtreamApiUrl;
-    final m3uUrl = source.xtreamM3uUrl;
+  // بناء جميع احتمالات الرابط تلقائياً
+  static List<String> _buildUrlVariations(String raw) {
+    final clean = raw.trim().replaceAll(RegExp(r'/+$'), '');
+    final variations = <String>[];
 
-    if (apiUrl == null || m3uUrl == null) {
-      throw Exception('بيانات الاتصال غير مكتملة — تحقق من عنوان السيرفر والمستخدم وكلمة المرور');
+    // الرابط كما هو أولاً
+    variations.add(clean);
+
+    final isHttps = clean.startsWith('https://');
+    final isHttp = clean.startsWith('http://');
+    final hasPort = RegExp(r':\d+$').hasMatch(clean);
+
+    if (isHttps) {
+      // جرب HTTP بدل HTTPS
+      final httpVersion = clean.replaceFirst('https://', 'http://');
+      variations.add(httpVersion);
+      // جرب HTTP:80
+      if (!hasPort) {
+        variations.add('$httpVersion:80');
+        variations.add('$httpVersion:8080');
+        variations.add('$httpVersion:25461');
+      }
+    } else if (isHttp) {
+      if (!hasPort) {
+        // جرب مع المنافذ الشائعة
+        variations.add('$clean:80');
+        variations.add('$clean:8080');
+        variations.add('$clean:25461');
+      }
+      // جرب HTTPS
+      final httpsVersion = clean.replaceFirst('http://', 'https://');
+      variations.add(httpsVersion);
+    } else {
+      // بدون بروتوكول — أضف http
+      variations.add('http://$clean');
+      variations.add('http://$clean:80');
+      variations.add('https://$clean');
+    }
+
+    return variations.toSet().toList();
+  }
+
+  // Xtream Codes مع محاولة تلقائية لجميع احتمالات الرابط
+  static Future<List<Channel>> _parseXtream(Source source) async {
+    final user = source.username ?? '';
+    final pass = source.password ?? '';
+    final rawServer = source.serverUrl ?? '';
+
+    if (rawServer.isEmpty || user.isEmpty || pass.isEmpty) {
+      throw Exception('أدخل عنوان السيرفر واسم المستخدم وكلمة المرور');
     }
 
     final dio = _buildDio();
+    final variations = _buildUrlVariations(rawServer);
+    String? workingBase;
+    String? lastError;
 
-    // الخطوة 1: التحقق من بيانات الدخول عبر Xtream API
-    try {
-      final apiResp = await dio.get<String>(
-        apiUrl,
-        options: Options(responseType: ResponseType.plain),
-      );
+    // جرّب كل احتمال للرابط حتى ينجح واحد
+    for (final base in variations) {
+      try {
+        final apiUrl = '$base/player_api.php?username=$user&password=$pass';
+        final resp = await dio.get<String>(
+          apiUrl,
+          options: Options(
+            responseType: ResponseType.plain,
+            validateStatus: (s) => s != null && s < 600,
+          ),
+        );
 
-      if (apiResp.statusCode != 200) {
-        throw Exception('السيرفر رفض الاتصال (${apiResp.statusCode}) — تحقق من بيانات الدخول');
-      }
+        final body = resp.data ?? '';
+        final code = resp.statusCode ?? 0;
 
-      final body = apiResp.data ?? '';
-      if (body.contains('"user_info"')) {
-        // تحقق من صلاحية الحساب
-        try {
-          final json = jsonDecode(body) as Map<String, dynamic>;
-          final userInfo = json['user_info'] as Map<String, dynamic>?;
-          if (userInfo != null) {
-            final status = userInfo['status']?.toString() ?? '';
-            if (status == 'Banned' || status == 'banned') {
-              throw Exception('الحساب محظور — تواصل مع مزود الخدمة');
-            }
-            final expDate = userInfo['exp_date'];
-            if (expDate != null) {
-              final exp = int.tryParse(expDate.toString()) ?? 0;
-              if (exp > 0 && exp < DateTime.now().millisecondsSinceEpoch ~/ 1000) {
-                throw Exception('انتهت صلاحية الاشتراك — تواصل مع مزود الخدمة');
+        if (code == 200 && body.isNotEmpty) {
+          // تحقق من رسالة "خطأ في البيانات"
+          if (body.contains('"Wrong credentials"') ||
+              body.toLowerCase().contains('wrong') ||
+              body.contains('"error"') && !body.contains('"user_info"')) {
+            throw Exception('اسم المستخدم أو كلمة المرور غير صحيحة');
+          }
+
+          // التحقق من صلاحية الحساب
+          if (body.contains('"user_info"')) {
+            try {
+              final json = jsonDecode(body) as Map<String, dynamic>;
+              final userInfo = json['user_info'] as Map<String, dynamic>?;
+              if (userInfo != null) {
+                final status = userInfo['status']?.toString() ?? '';
+                if (status == 'Banned' || status == 'banned') {
+                  throw Exception('الحساب محظور — تواصل مع مزود الخدمة');
+                }
+                final expDate = userInfo['exp_date'];
+                if (expDate != null) {
+                  final exp = int.tryParse(expDate.toString()) ?? 0;
+                  if (exp > 0 &&
+                      exp < DateTime.now().millisecondsSinceEpoch ~/ 1000) {
+                    throw Exception('انتهت صلاحية الاشتراك — تواصل مع مزود الخدمة');
+                  }
+                }
+              }
+            } catch (e) {
+              if (e.toString().contains('انتهت') ||
+                  e.toString().contains('محظور') ||
+                  e.toString().contains('غير صحيحة')) {
+                rethrow;
               }
             }
           }
-        } catch (e) {
-          if (e.toString().contains('انتهت') || e.toString().contains('محظور')) {
-            rethrow;
-          }
-          // الاستمرار إذا كانت مشكلة في تحليل JSON فقط
+
+          workingBase = base;
+          break;
         }
-      } else if (body.contains('"Wrong credentials"') ||
-          body.contains('"wrong_credentials"') ||
-          body.toLowerCase().contains('wrong') ||
-          body.contains('"error"')) {
-        throw Exception('اسم المستخدم أو كلمة المرور غير صحيحة');
+      } on DioException catch (e) {
+        lastError = _friendlyDioError(e, base);
+        continue;
+      } on Exception catch (e) {
+        final msg = e.toString();
+        if (msg.contains('محظور') ||
+            msg.contains('انتهت') ||
+            msg.contains('غير صحيحة')) {
+          rethrow;
+        }
+        lastError = msg;
+        continue;
       }
-    } on DioException catch (e) {
-      throw Exception(_friendlyDioError(e, source.serverUrl ?? ''));
     }
 
-    // الخطوة 2: تحميل قائمة القنوات M3U
+    if (workingBase == null) {
+      throw Exception(lastError ??
+          'تعذّر الاتصال بالسيرفر — تحقق من العنوان واتصالك بالإنترنت');
+    }
+
+    // تحميل قائمة القنوات باستخدام الرابط الصحيح الذي نجح
+    final m3uUrl =
+        '$workingBase/get.php?username=$user&password=$pass&type=m3u_plus&output=ts';
+
     try {
       final m3uResp = await dio.get<String>(
         m3uUrl,
-        options: Options(responseType: ResponseType.plain),
+        options: Options(
+          responseType: ResponseType.plain,
+          receiveTimeout: const Duration(minutes: 3),
+        ),
       );
 
-      if (m3uResp.data == null || m3uResp.data!.isEmpty) {
+      final content = m3uResp.data ?? '';
+      if (content.isEmpty) {
         throw Exception('القائمة فارغة — لا توجد قنوات في هذا الاشتراك');
       }
-
-      final content = m3uResp.data!;
       if (!content.trimLeft().startsWith('#EXTM3U') &&
           !content.contains('#EXTINF')) {
         throw Exception('بيانات القائمة غير صالحة — تأكد من نوع المصدر');
@@ -115,85 +189,66 @@ class M3uParser {
 
       return _parseInIsolate(content, source.id);
     } on DioException catch (e) {
-      throw Exception(_friendlyDioError(e, source.serverUrl ?? ''));
+      throw Exception(_friendlyDioError(e, workingBase));
     }
   }
 
   // تحليل M3U من رابط عادي
   static Future<List<Channel>> _parseM3uUrl(Source source) async {
     final url = source.effectiveUrl;
-    if (url == null || url.isEmpty) {
-      throw Exception('لا يوجد رابط للمصدر');
-    }
+    if (url == null || url.isEmpty) throw Exception('لا يوجد رابط للمصدر');
 
     final dio = _buildDio();
-
     try {
-      final response = await dio.get<String>(
+      final resp = await dio.get<String>(
         url,
-        options: Options(responseType: ResponseType.plain),
+        options: Options(
+          responseType: ResponseType.plain,
+          receiveTimeout: const Duration(minutes: 3),
+        ),
       );
 
-      if (response.data == null || response.data!.isEmpty) {
-        throw Exception('الملف فارغ أو لا يوجد محتوى');
-      }
-
-      return _parseInIsolate(response.data!, source.id);
+      final content = resp.data ?? '';
+      if (content.isEmpty) throw Exception('الملف فارغ أو لا يوجد محتوى');
+      return _parseInIsolate(content, source.id);
     } on DioException catch (e) {
       throw Exception(_friendlyDioError(e, url));
     }
   }
 
-  // تحويل أخطاء Dio إلى رسائل عربية واضحة
   static String _friendlyDioError(DioException e, String url) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
-        return 'انتهت مدة الاتصال — تأكد من عنوان السيرفر والاتصال بالإنترنت';
+        return 'انتهت مدة الاتصال — السيرفر لا يستجيب ($url)';
       case DioExceptionType.receiveTimeout:
-        return 'السيرفر لا يستجيب — حاول مجدداً لاحقاً';
+        return 'السيرفر لا يرسل بيانات — حاول مجدداً';
       case DioExceptionType.connectionError:
         final msg = e.message ?? '';
-        if (msg.contains('ECONNREFUSED') || msg.contains('refused')) {
-          return 'السيرفر يرفض الاتصال — تحقق من المنفذ وعنوان السيرفر';
-        }
-        if (msg.contains('ENOTFOUND') || msg.contains('lookup')) {
-          return 'لم يتم العثور على السيرفر — تحقق من عنوان السيرفر';
-        }
-        if (msg.contains('ECONNRESET') || msg.contains('reset')) {
-          return 'انقطع الاتصال بالسيرفر — تحقق من اتصالك بالإنترنت';
-        }
-        return 'فشل الاتصال بالسيرفر — تحقق من عنوان السيرفر والاتصال بالإنترنت';
+        if (msg.contains('refused')) return 'السيرفر يرفض الاتصال — تحقق من المنفذ';
+        if (msg.contains('ENOTFOUND') || msg.contains('lookup'))
+          return 'لم يتم العثور على السيرفر — تحقق من العنوان';
+        return 'فشل الاتصال — تحقق من العنوان والإنترنت';
       case DioExceptionType.badResponse:
         final code = e.response?.statusCode ?? 0;
-        if (code == 401 || code == 403) {
-          return 'بيانات الدخول غير صحيحة (خطأ $code)';
-        }
-        if (code == 404) {
-          return 'الصفحة غير موجودة (404) — تحقق من عنوان السيرفر';
-        }
-        if (code >= 500) {
-          return 'خطأ في السيرفر ($code) — حاول مجدداً لاحقاً';
-        }
-        return 'استجابة غير متوقعة من السيرفر ($code)';
+        if (code == 401 || code == 403) return 'بيانات الدخول غير صحيحة ($code)';
+        if (code == 404) return 'الصفحة غير موجودة (404)';
+        if (code >= 500) return 'خطأ في السيرفر ($code)';
+        return 'استجابة غير متوقعة ($code)';
       case DioExceptionType.badCertificate:
-        return 'شهادة SSL غير صالحة — جرّب HTTP بدلاً من HTTPS';
-      case DioExceptionType.cancel:
-        return 'تم إلغاء الطلب';
+        return 'خطأ SSL — جرّب http:// بدل https://';
       default:
-        final msg = e.message ?? '';
-        if (msg.isNotEmpty) return msg;
-        return 'فشل الاتصال — تحقق من اتصالك بالإنترنت';
+        return e.message?.isNotEmpty == true
+            ? e.message!
+            : 'فشل الاتصال — تحقق من اتصالك بالإنترنت';
     }
   }
 
-  // تحليل M3U من نص
   static Future<List<Channel>> parseFromString(
       String content, String sourceId) async {
     return _parseInIsolate(content, sourceId);
   }
 
-  // تشغيل التحليل في Isolate منفصل لتفادي تجميد الواجهة
   static Future<List<Channel>> _parseInIsolate(
       String content, String sourceId) async {
     final receivePort = ReceivePort();
@@ -204,7 +259,6 @@ class M3uParser {
     return await receivePort.first as List<Channel>;
   }
 
-  // دالة التحليل الفعلية (تعمل في Isolate)
   static void _parseM3uContent(List<dynamic> args) {
     final sendPort = args[0] as SendPort;
     final content = args[1] as String;
@@ -212,69 +266,46 @@ class M3uParser {
 
     final channels = <Channel>[];
     final lines = content.split('\n');
-
-    String? currentName;
-    String? currentLogo;
-    String? currentGroup;
-    String? currentTvgId;
-    String? currentTvgName;
-    String? currentLanguage;
-    String? currentCountry;
-    int channelIndex = 0;
+    String? name, logo, group, tvgId, tvgName, language, country;
+    int idx = 0;
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-
       if (line.startsWith('#EXTINF:')) {
-        currentName = _extractAttribute(line, 'tvg-name') ??
-            _extractDisplayName(line);
-        currentLogo = _extractAttribute(line, 'tvg-logo');
-        currentGroup = _extractAttribute(line, 'group-title') ?? 'عام';
-        currentTvgId = _extractAttribute(line, 'tvg-id');
-        currentTvgName = _extractAttribute(line, 'tvg-name');
-        currentLanguage = _extractAttribute(line, 'tvg-language');
-        currentCountry = _extractAttribute(line, 'tvg-country');
-      } else if (line.isNotEmpty &&
-          !line.startsWith('#') &&
-          currentName != null) {
-        channelIndex++;
-        final channelId = '${sourceId}_$channelIndex';
-
+        name = _attr(line, 'tvg-name') ?? _displayName(line);
+        logo = _attr(line, 'tvg-logo');
+        group = _attr(line, 'group-title') ?? 'عام';
+        tvgId = _attr(line, 'tvg-id');
+        tvgName = _attr(line, 'tvg-name');
+        language = _attr(line, 'tvg-language');
+        country = _attr(line, 'tvg-country');
+      } else if (line.isNotEmpty && !line.startsWith('#') && name != null) {
+        idx++;
         channels.add(Channel(
-          id: channelId,
-          name: currentName,
-          logoUrl: currentLogo,
-          category: currentGroup ?? 'عام',
-          group: currentGroup,
-          language: currentLanguage,
-          country: currentCountry,
-          tvgId: currentTvgId,
-          tvgName: currentTvgName,
+          id: '${sourceId}_$idx',
+          name: name,
+          logoUrl: logo,
+          category: group ?? 'عام',
+          group: group,
+          language: language,
+          country: country,
+          tvgId: tvgId,
+          tvgName: tvgName,
           streamUrls: [line],
         ));
-
-        currentName = null;
-        currentLogo = null;
-        currentGroup = null;
-        currentTvgId = null;
-        currentTvgName = null;
-        currentLanguage = null;
-        currentCountry = null;
+        name = logo = group = tvgId = tvgName = language = country = null;
       }
     }
-
     sendPort.send(channels);
   }
 
-  static String? _extractAttribute(String line, String attribute) {
-    final regex = RegExp('$attribute="([^"]*)"', caseSensitive: false);
-    final match = regex.firstMatch(line);
-    return match?.group(1);
+  static String? _attr(String line, String attr) {
+    final m = RegExp('$attr="([^"]*)"', caseSensitive: false).firstMatch(line);
+    return m?.group(1);
   }
 
-  static String? _extractDisplayName(String line) {
-    final commaIndex = line.lastIndexOf(',');
-    if (commaIndex == -1) return null;
-    return line.substring(commaIndex + 1).trim();
+  static String? _displayName(String line) {
+    final i = line.lastIndexOf(',');
+    return i == -1 ? null : line.substring(i + 1).trim();
   }
 }
